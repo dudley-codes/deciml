@@ -64,6 +64,19 @@ export interface DecimlIndex {
   symbols: SymbolRecord[];
 }
 
+export interface DescriptorRecord {
+  fileId: string;
+  path: string;
+  sourceHash: string;
+  descriptorSourceHash: string;
+  descriptor: string;
+}
+
+export interface DescriptorStore {
+  version: 1;
+  descriptors: DescriptorRecord[];
+}
+
 export interface IndexResult {
   repositoryRoot: string;
   indexPath: string;
