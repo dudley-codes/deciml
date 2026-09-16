@@ -52,6 +52,7 @@ Pi can then use these tools:
 
 - `deciml_project` retrieves `.deciml/project.md`.
 - `deciml_open @Fxx` opens an indexed file. A descriptor miss returns the complete canonical file, its current source hash, the indexed symbols and ranges, and instructions for producing a descriptor. A fresh descriptor returns a `HIT` with semantic pseudo-code only.
+- `deciml_source @Sxx` resolves one symbol through the persisted index and returns only its indexed range from the current canonical file.
 - `deciml_save_descriptor @Fxx <descriptor>` validates the descriptor's file and symbol identity against the deterministic index before writing `.deciml/descriptors.json`.
 
 Descriptor generation happens in the visible Pi/model session after a cold `deciml_open`; Deciml does not make a hidden model call. The descriptor must begin with the indexed file identity and pair each described symbol with its indexed source range:
@@ -78,4 +79,4 @@ Only `@S` references listed by `deciml_open` are accepted, and each must belong 
 
 File references are allocated from lexically sorted benchmark paths. Symbol references are allocated by file and source order. The TypeScript compiler API extracts syntax-defined declarations, nested named functions, `useCallback` handlers, and Jest suites, hooks, and tests. Ranges are inclusive, one-based canonical source lines.
 
-This slice does not provide symbol-source retrieval, ordinary-read interception, telemetry, domain grouping, generalized configuration, or multi-repository indexing.
+This slice does not provide ordinary-read interception, telemetry, domain grouping, generalized configuration, or multi-repository indexing.

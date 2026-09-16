@@ -4,15 +4,14 @@ import { join } from "node:path";
 
 import { withFileMutationQueue } from "@earendil-works/pi-coding-agent";
 
+import { loadIndex } from "../index/load-index.js";
 import type {
-  DecimlIndex,
   DescriptorRecord,
   DescriptorStore,
   FileRecord,
   SymbolRecord,
 } from "../index/types.js";
 
-const INDEX_PATH = join(".deciml", "index.json");
 const DESCRIPTORS_PATH = join(".deciml", "descriptors.json");
 
 export interface IndexedFile {
@@ -35,21 +34,6 @@ function errorCode(error: unknown): string | undefined {
   return error && typeof error === "object" && "code" in error
     ? String(error.code)
     : undefined;
-}
-
-async function loadIndex(repositoryRoot: string): Promise<DecimlIndex> {
-  const indexPath = join(repositoryRoot, INDEX_PATH);
-
-  try {
-    return JSON.parse(await readFile(indexPath, "utf8")) as DecimlIndex;
-  } catch (error: unknown) {
-    if (errorCode(error) === "ENOENT") {
-      throw new Error(
-        "No Deciml index exists for this repository. Run `deciml index` first.",
-      );
-    }
-    throw error;
-  }
 }
 
 async function loadDescriptorStore(repositoryRoot: string): Promise<DescriptorStore> {

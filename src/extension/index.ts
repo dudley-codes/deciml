@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { openIndexedFile, saveDescriptor } from "../descriptors/store.js";
+import { resolveSymbolSource } from "../source/resolve.js";
 
 const PROJECT_INDEX_PATH = join(".deciml", "project.md");
 
@@ -103,6 +104,41 @@ export const decimlOpen = defineTool({
   },
 });
 
+export const decimlSource = defineTool({
+  name: "deciml_source",
+  label: "Deciml Source",
+  description:
+    "Return the exact current repository source for one indexed Deciml symbol range.",
+  promptSnippet: "Read exact canonical source for one indexed Deciml symbol",
+  parameters: Type.Object({
+    symbolId: Type.String({
+      description: "Deterministic symbol reference, for example @S001",
+    }),
+  }),
+
+  async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    const resolved = await resolveSymbolSource(ctx.cwd, params.symbolId);
+    const text =
+      `FILE ${resolved.fileId}\n` +
+      `PATH ${resolved.path}\n` +
+      `SYMBOL ${resolved.symbolId} ${resolved.symbolName}\n` +
+      `SOURCE L${resolved.startLine}-L${resolved.endLine}\n\n` +
+      resolved.sourceText;
+
+    return {
+      content: [{ type: "text", text }],
+      details: {
+        fileId: resolved.fileId,
+        path: resolved.path,
+        symbolId: resolved.symbolId,
+        symbolName: resolved.symbolName,
+        startLine: resolved.startLine,
+        endLine: resolved.endLine,
+      },
+    };
+  },
+});
+
 export const decimlSaveDescriptor = defineTool({
   name: "deciml_save_descriptor",
   label: "Deciml Save Descriptor",
@@ -139,5 +175,6 @@ export const decimlSaveDescriptor = defineTool({
 export default function decimlExtension(pi: ExtensionAPI): void {
   pi.registerTool(decimlProject);
   pi.registerTool(decimlOpen);
+  pi.registerTool(decimlSource);
   pi.registerTool(decimlSaveDescriptor);
 }
