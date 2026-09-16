@@ -11,17 +11,25 @@ function errorCode(error: unknown): string | undefined {
     : undefined;
 }
 
-export async function loadIndex(repositoryRoot: string): Promise<DecimlIndex> {
+export async function loadIndexIfPresent(
+  repositoryRoot: string,
+): Promise<DecimlIndex | undefined> {
   try {
     return JSON.parse(
       await readFile(join(repositoryRoot, INDEX_PATH), "utf8"),
     ) as DecimlIndex;
   } catch (error: unknown) {
-    if (errorCode(error) === "ENOENT") {
-      throw new Error(
-        "No Deciml index exists for this repository. Run `deciml index` first.",
-      );
-    }
+    if (errorCode(error) === "ENOENT") return undefined;
     throw error;
   }
+}
+
+export async function loadIndex(repositoryRoot: string): Promise<DecimlIndex> {
+  const index = await loadIndexIfPresent(repositoryRoot);
+  if (!index) {
+    throw new Error(
+      "No Deciml index exists for this repository. Run `deciml index` first.",
+    );
+  }
+  return index;
 }
