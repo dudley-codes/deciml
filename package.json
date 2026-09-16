@@ -1,0 +1,25 @@
+{
+  "name": "deciml",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "deciml": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "deciml": "node dist/cli.js"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "^0.85.1",
+    "@earendil-works/pi-coding-agent": "^0.85.1",
+    "typescript": "~6.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0"
+  }
+}
