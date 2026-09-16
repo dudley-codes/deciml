@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { withFileMutationQueue } from "@earendil-works/pi-coding-agent";
 
-import { loadIndex } from "../index/load-index.js";
+import { loadIndex, loadIndexIfPresent } from "../index/load-index.js";
 import type {
   DescriptorRecord,
   DescriptorStore,
@@ -98,6 +98,21 @@ export async function openIndexedFile(
     ...indexedFile,
     ...(descriptor && descriptorIsFresh ? { descriptor } : {}),
   };
+}
+
+export async function openIndexedPath(
+  repositoryRoot: string,
+  absolutePath: string,
+): Promise<IndexedFile | undefined> {
+  const index = await loadIndexIfPresent(repositoryRoot);
+  if (!index) return undefined;
+
+  const file = index.files.find(
+    (candidate) => resolve(repositoryRoot, candidate.path) === absolutePath,
+  );
+  if (!file) return undefined;
+
+  return openIndexedFile(repositoryRoot, file.id);
 }
 
 function validateDescriptor(

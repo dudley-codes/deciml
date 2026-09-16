@@ -1,12 +1,20 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { openIndexedFile, saveDescriptor } from "../descriptors/store.js";
 import { resolveSymbolSource } from "../source/resolve.js";
+import { decimlRead } from "./read.js";
+
+export { decimlRead } from "./read.js";
 
 const PROJECT_INDEX_PATH = join(".deciml", "project.md");
+const DECIML_SKILL_PATH = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../skills/deciml/SKILL.md",
+);
 
 export const decimlProject = defineTool({
   name: "deciml_project",
@@ -173,8 +181,13 @@ export const decimlSaveDescriptor = defineTool({
 });
 
 export default function decimlExtension(pi: ExtensionAPI): void {
+  pi.registerTool(decimlRead);
   pi.registerTool(decimlProject);
   pi.registerTool(decimlOpen);
   pi.registerTool(decimlSource);
   pi.registerTool(decimlSaveDescriptor);
+
+  pi.on("resources_discover", () => ({
+    skillPaths: [DECIML_SKILL_PATH],
+  }));
 }
