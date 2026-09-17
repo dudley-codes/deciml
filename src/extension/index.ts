@@ -6,11 +6,25 @@ import { fileURLToPath } from "node:url";
 
 import { openIndexedFile, saveDescriptor } from "../descriptors/store.js";
 import { resolveSymbolSource } from "../source/resolve.js";
-import { decimlRead } from "./read.js";
+import {
+  measureTextConsumption,
+  parseBenchmarkMode,
+  recordConsumption,
+  startConsumptionSession,
+  type BenchmarkMode,
+  type ConsumptionRecorder,
+} from "../telemetry/session.js";
+import { createDecimlRead } from "./read.js";
 
 export { decimlRead } from "./read.js";
 
 const PROJECT_INDEX_PATH = join(".deciml", "project.md");
+const DECIML_NAVIGATION_TOOLS = new Set([
+  "deciml_project",
+  "deciml_open",
+  "deciml_source",
+  "deciml_save_descriptor",
+]);
 const DECIML_SKILL_PATH = join(
   dirname(fileURLToPath(import.meta.url)),
   "../../skills/deciml/SKILL.md",
@@ -47,105 +61,142 @@ export const decimlProject = defineTool({
   },
 });
 
-export const decimlOpen = defineTool({
-  name: "deciml_open",
-  label: "Deciml Open",
-  description:
-    "Open an indexed Deciml file. A descriptor miss returns deterministic symbol identity and the complete canonical source.",
-  promptSnippet: "Open an indexed file through its Deciml file reference",
-  parameters: Type.Object({
-    fileId: Type.String({ description: "Deterministic file reference, for example @F01" }),
-  }),
+const ignoreConsumption: ConsumptionRecorder = async () => {};
 
-  async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-    const indexedFile = await openIndexedFile(ctx.cwd, params.fileId);
-    const { file, sourceHash, sourceText, symbols } = indexedFile;
+export function createDecimlOpen(
+  record: ConsumptionRecorder = ignoreConsumption,
+) {
+  return defineTool({
+    name: "deciml_open",
+    label: "Deciml Open",
+    description:
+      "Open an indexed Deciml file. A descriptor miss returns deterministic symbol identity and the complete canonical source.",
+    promptSnippet: "Open an indexed file through its Deciml file reference",
+    parameters: Type.Object({
+      fileId: Type.String({ description: "Deterministic file reference, for example @F01" }),
+    }),
 
-    if (indexedFile.descriptor) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `HIT ${file.id}\nPATH ${file.path}\n\n${indexedFile.descriptor.descriptor}`,
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const indexedFile = await openIndexedFile(ctx.cwd, params.fileId);
+      const { file, sourceHash, sourceText, symbols } = indexedFile;
+
+      if (indexedFile.descriptor) {
+        const descriptorConsumption = measureTextConsumption(
+          indexedFile.descriptor.descriptor,
+        );
+        await record(ctx.cwd, {
+          descriptorReads: 1,
+          descriptorBytesRead: descriptorConsumption.bytes,
+        });
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `HIT ${file.id}\nPATH ${file.path}\n\n${indexedFile.descriptor.descriptor}`,
+            },
+          ],
+          details: {
+            status: "HIT",
+            fileId: file.id,
+            path: file.path,
+            sourceHash,
           },
-        ],
+        };
+      }
+
+      const symbolCatalog = symbols
+        .map(
+          (symbol) =>
+            `${symbol.kind.toUpperCase()} ${symbol.id} ${symbol.name}\n` +
+            `SOURCE L${symbol.startLine}-L${symbol.endLine}`,
+        )
+        .join("\n\n");
+      const text =
+        `MISS ${file.id}\n` +
+        `PATH ${file.path}\n` +
+        `SOURCE_HASH ${sourceHash}\n\n` +
+        `INDEXED SYMBOLS\n${symbolCatalog}\n\n` +
+        "DESCRIPTOR INSTRUCTIONS\n" +
+        "Produce task-independent semantic pseudo-code describing this file itself, not the current task.\n" +
+        "Begin with exactly:\n" +
+        `FILE ${file.id}\n` +
+        `PATH ${file.path}\n` +
+        "For each described symbol, copy its indexed @S reference and name above, then place its exact SOURCE range on the following line.\n" +
+        "Use @S references only in symbol section headers. Do not invent or copy file or symbol identity.\n" +
+        `Save the complete descriptor with deciml_save_descriptor for ${file.id}.\n\n` +
+        `CANONICAL SOURCE\n${sourceText}`;
+      const sourceConsumption = measureTextConsumption(sourceText);
+
+      await record(ctx.cwd, {
+        fullFileReads: 1,
+        canonicalSourceLinesRead: sourceConsumption.lines,
+        canonicalSourceBytesRead: sourceConsumption.bytes,
+        descriptorGenerationSourceBytes: sourceConsumption.bytes,
+      });
+
+      return {
+        content: [{ type: "text", text }],
         details: {
-          status: "HIT",
+          status: "MISS",
           fileId: file.id,
           path: file.path,
           sourceHash,
         },
       };
-    }
+    },
+  });
+}
 
-    const symbolCatalog = symbols
-      .map(
-        (symbol) =>
-          `${symbol.kind.toUpperCase()} ${symbol.id} ${symbol.name}\n` +
-          `SOURCE L${symbol.startLine}-L${symbol.endLine}`,
-      )
-      .join("\n\n");
-    const text =
-      `MISS ${file.id}\n` +
-      `PATH ${file.path}\n` +
-      `SOURCE_HASH ${sourceHash}\n\n` +
-      `INDEXED SYMBOLS\n${symbolCatalog}\n\n` +
-      "DESCRIPTOR INSTRUCTIONS\n" +
-      "Produce task-independent semantic pseudo-code describing this file itself, not the current task.\n" +
-      "Begin with exactly:\n" +
-      `FILE ${file.id}\n` +
-      `PATH ${file.path}\n` +
-      "For each described symbol, copy its indexed @S reference and name above, then place its exact SOURCE range on the following line.\n" +
-      "Use @S references only in symbol section headers. Do not invent or copy file or symbol identity.\n" +
-      `Save the complete descriptor with deciml_save_descriptor for ${file.id}.\n\n` +
-      `CANONICAL SOURCE\n${sourceText}`;
+export const decimlOpen = createDecimlOpen();
 
-    return {
-      content: [{ type: "text", text }],
-      details: {
-        status: "MISS",
-        fileId: file.id,
-        path: file.path,
-        sourceHash,
-      },
-    };
-  },
-});
-
-export const decimlSource = defineTool({
-  name: "deciml_source",
-  label: "Deciml Source",
-  description:
-    "Return the exact current repository source for one indexed Deciml symbol range.",
-  promptSnippet: "Read exact canonical source for one indexed Deciml symbol",
-  parameters: Type.Object({
-    symbolId: Type.String({
-      description: "Deterministic symbol reference, for example @S001",
+export function createDecimlSource(
+  record: ConsumptionRecorder = ignoreConsumption,
+) {
+  return defineTool({
+    name: "deciml_source",
+    label: "Deciml Source",
+    description:
+      "Return the exact current repository source for one indexed Deciml symbol range.",
+    promptSnippet: "Read exact canonical source for one indexed Deciml symbol",
+    parameters: Type.Object({
+      symbolId: Type.String({
+        description: "Deterministic symbol reference, for example @S001",
+      }),
     }),
-  }),
 
-  async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-    const resolved = await resolveSymbolSource(ctx.cwd, params.symbolId);
-    const text =
-      `FILE ${resolved.fileId}\n` +
-      `PATH ${resolved.path}\n` +
-      `SYMBOL ${resolved.symbolId} ${resolved.symbolName}\n` +
-      `SOURCE L${resolved.startLine}-L${resolved.endLine}\n\n` +
-      resolved.sourceText;
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const resolved = await resolveSymbolSource(ctx.cwd, params.symbolId);
+      const text =
+        `FILE ${resolved.fileId}\n` +
+        `PATH ${resolved.path}\n` +
+        `SYMBOL ${resolved.symbolId} ${resolved.symbolName}\n` +
+        `SOURCE L${resolved.startLine}-L${resolved.endLine}\n\n` +
+        resolved.sourceText;
+      const sourceConsumption = measureTextConsumption(resolved.sourceText);
 
-    return {
-      content: [{ type: "text", text }],
-      details: {
-        fileId: resolved.fileId,
-        path: resolved.path,
-        symbolId: resolved.symbolId,
-        symbolName: resolved.symbolName,
-        startLine: resolved.startLine,
-        endLine: resolved.endLine,
-      },
-    };
-  },
-});
+      await record(ctx.cwd, {
+        symbolSourceReads: 1,
+        canonicalSourceLinesRead: sourceConsumption.lines,
+        canonicalSourceBytesRead: sourceConsumption.bytes,
+      });
+
+      return {
+        content: [{ type: "text", text }],
+        details: {
+          fileId: resolved.fileId,
+          path: resolved.path,
+          symbolId: resolved.symbolId,
+          symbolName: resolved.symbolName,
+          startLine: resolved.startLine,
+          endLine: resolved.endLine,
+        },
+      };
+    },
+  });
+}
+
+export const decimlSource = createDecimlSource();
 
 export const decimlSaveDescriptor = defineTool({
   name: "deciml_save_descriptor",
@@ -181,13 +232,40 @@ export const decimlSaveDescriptor = defineTool({
 });
 
 export default function decimlExtension(pi: ExtensionAPI): void {
-  pi.registerTool(decimlRead);
+  let currentMode: BenchmarkMode | undefined;
+
+  pi.registerFlag("deciml-mode", {
+    description: "Benchmark mode: Control, Cold, or Warm",
+    type: "string",
+  });
+
+  pi.registerTool(
+    createDecimlRead(
+      recordConsumption,
+      () => currentMode !== "Control",
+    ),
+  );
   pi.registerTool(decimlProject);
-  pi.registerTool(decimlOpen);
-  pi.registerTool(decimlSource);
+  pi.registerTool(createDecimlOpen(recordConsumption));
+  pi.registerTool(createDecimlSource(recordConsumption));
   pi.registerTool(decimlSaveDescriptor);
 
+  pi.on("session_start", async (event, ctx) => {
+    currentMode = parseBenchmarkMode(pi.getFlag("deciml-mode"));
+    if (event.reason !== "reload") {
+      await startConsumptionSession(ctx.cwd, currentMode);
+    }
+
+    if (currentMode === "Control") {
+      pi.setActiveTools(
+        pi
+          .getActiveTools()
+          .filter((toolName) => !DECIML_NAVIGATION_TOOLS.has(toolName)),
+      );
+    }
+  });
+
   pi.on("resources_discover", () => ({
-    skillPaths: [DECIML_SKILL_PATH],
+    skillPaths: currentMode === "Control" ? [] : [DECIML_SKILL_PATH],
   }));
 }

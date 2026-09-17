@@ -41,14 +41,21 @@ Running the command repeatedly against the same source produces byte-identical o
 
 ## Use the Pi extension
 
-Start Pi from the indexed Rewind checkout and load the Deciml extension from this repository:
+Start Pi from the indexed Rewind checkout and load the Deciml extension from this repository with an explicit benchmark mode:
 
 ```bash
 cd /path/to/clean/rewind
-pi -e /path/to/deciml/src/extension/index.ts
+pi -e /path/to/deciml/src/extension/index.ts --deciml-mode Cold
 ```
 
-Pi can then use these tools:
+Use `Cold` for a checkout with empty descriptors and `Warm` after restoring the pre-implementation descriptor snapshot. Use `Control` to keep the instrumented standard `read` tool while disabling Deciml's navigation tools and bundled skill:
+
+```bash
+pi -e /path/to/deciml/src/extension/index.ts --deciml-mode Control
+pi -e /path/to/deciml/src/extension/index.ts --deciml-mode Warm
+```
+
+In Cold and Warm modes, Pi can use these tools:
 
 - `deciml_project` retrieves `.deciml/project.md`.
 - `deciml_open @Fxx` opens an indexed file. A descriptor miss returns the complete canonical file, its current source hash, the indexed symbols and ranges, and instructions for producing a descriptor. A fresh descriptor returns a `HIT` with semantic pseudo-code only.
@@ -77,8 +84,23 @@ BEHAVIOR
 
 Only `@S` references listed by `deciml_open` are accepted, and each must belong to the selected `@F` file. Unknown symbols, symbols from another file, and altered ranges are rejected without changing descriptor state. A saved record contains both the current source hash and the descriptor source hash; a later source change makes it stale and causes the next open to follow the cold `MISS` path again.
 
+## Session consumption
+
+Each new benchmark session replaces `.deciml/consumption.json` with a fresh, human-readable artifact for its selected mode. A Pi runtime reload preserves the current session's counters. The artifact contains:
+
+- `fullFileReads` — successful indexed full-file reads, including `deciml_open` misses.
+- `descriptorReads` — successful descriptor hits, including ordinary reads redirected by warm navigation.
+- `symbolSourceReads` — successful `deciml_source` operations.
+- `canonicalSourceLinesRead` and `canonicalSourceBytesRead` — exact canonical source material returned by indexed full, partial, cold-open, and symbol reads.
+- `descriptorBytesRead` — persisted descriptor text returned on hits, excluding Deciml's wrapper metadata.
+- `descriptorGenerationSourceBytes` — canonical source supplied specifically by `deciml_open` misses for descriptor generation. These bytes also appear in the canonical-source totals.
+
+Byte counts use UTF-8. Non-indexed reads, project overview text, response labels, and descriptor instructions are not counted. Concurrent tool calls serialize their aggregate updates so each qualifying operation changes the artifact once.
+
+Pi provider input, cache-read, and output statistics are intentionally not collected here. Capture them separately during each benchmark and place them beside this artifact in the final comparison.
+
 ## Extraction policy
 
 File references are allocated from lexically sorted benchmark paths. Symbol references are allocated by file and source order. The TypeScript compiler API extracts syntax-defined declarations, nested named functions, `useCallback` handlers, and Jest suites, hooks, and tests. Ranges are inclusive, one-based canonical source lines.
 
-This slice does not provide telemetry, domain grouping, generalized configuration, or multi-repository indexing.
+This slice does not provide provider telemetry, domain grouping, generalized configuration, or multi-repository indexing.

@@ -161,6 +161,7 @@ test("the extension discovers a valid Deciml workflow skill", async () => {
   let discoverResources;
   const registeredTools = [];
   decimlExtension({
+    registerFlag() {},
     registerTool(tool) {
       registeredTools.push(tool.name);
     },
